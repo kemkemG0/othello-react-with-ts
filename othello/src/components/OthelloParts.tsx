@@ -1,3 +1,5 @@
+/* eslint-disable no-continue */
+/* eslint-disable no-constant-condition */
 import React, { useState } from "react";
 
 type Color = "BL" | "WH" | "N";
@@ -60,11 +62,10 @@ const BoardRow: React.FC<BoardRowProps> = (props) => {
 
 const Board: React.FC = () => {
   const normalRow: Color[] = ["N", "N", "N", "N", "N", "N", "N", "N"];
+  const dh = [1, -1, 0];
+  const dw = [1, -1, 0];
   const indexes = [...Array(8).keys()];
-  const [boardState, setBoardState]: [
-    Color[][],
-    React.Dispatch<React.SetStateAction<Color[][]>>
-  ] = useState([
+  const [boardState, setBoardState] = useState<Color[][]>([
     [...normalRow],
     [...normalRow],
     [...normalRow],
@@ -75,27 +76,107 @@ const Board: React.FC = () => {
     [...normalRow],
   ]);
 
+  const [turn, setTurn] = useState<Color>("BL");
+
+  const reverseExecution = (
+    h: number,
+    w: number,
+    myturn: Color,
+    prevState: Color[][]
+  ): { newState: Color[][]; isReversed: boolean } => {
+    const newState = [...prevState];
+    let isReversed = false;
+
+    // [0]が自分のターン、[1]が相手のターンを指す
+    const [me, enemy]: [Color, Color] =
+      myturn === "BL" ? ["BL", "WH"] : ["WH", "BL"];
+
+    for (let i = 0; i < 3; i += 1) {
+      for (let j = 0; j < 3; j += 1) {
+        let nh = h;
+        let nw = w;
+        // eslint-disable-next-line no-continue
+        if (dh[i] === dw[j] && dh[i] === 0) continue;
+        // else {
+        let isReversible = false;
+        let pre = "N";
+        while (1) {
+          // 自分が黒の時は 白,白,白,黒 のときのみOK
+          nh += dh[i];
+          nw += dw[j];
+
+          if (nh >= 8 || nw >= 8 || nh < 0 || nw < 0) break;
+          else if (newState[nh][nw] === "N") break;
+          else if (newState[nh][nw] === enemy) pre = enemy;
+          else if (newState[nh][nw] === me && pre === enemy) {
+            isReversible = true;
+            break;
+          } else break;
+        }
+
+        if (isReversible) {
+          isReversed = true;
+          nh = h;
+          nw = w;
+          while (1) {
+            if (newState[nh][nw] === me) break;
+            newState[nh][nw] = me;
+            // 初期位置は戻してあげないとバグる
+            if (nh === h && nw === w) newState[nh][nw] = "N";
+            nh += dh[i];
+            nw += dw[j];
+          }
+        }
+      }
+    }
+    if (isReversed) newState[h][w] = me;
+
+    return { newState, isReversed };
+  };
+
+  const reverseCells = (h: number, w: number, prevState: Color[][]) => {
+    // インターフェースだけ
+    const newState = [...prevState];
+    switch (newState[h][w]) {
+      case "N":
+        return reverseExecution(h, w, turn, newState);
+      default:
+        return { newState, isReversed: false };
+    }
+  };
+
   const putCell = (h: number, w: number): void => {
     // ここで、h,wの色を変えたりする
     // calcCells()的な
     // 下も副作用がないように意識
+
     setBoardState((prevState) => {
-      const newState = [...prevState];
-      newState[h][w] = "BL";
+      // ひっくり返す処理を実装
+      const { newState, isReversed } = reverseCells(h, w, [...prevState]);
+      if (isReversed) {
+        setTurn((prevTurn) => {
+          if (prevTurn === "WH") return "BL";
+          return "WH";
+        });
+      }
       return newState;
     });
   };
 
   return (
-    <table className="inner">
-      <tbody>
-        {indexes.map((h) => (
-          <tr key={h}>
-            <BoardRow h={h} putCell={putCell} rowColor={boardState[h]} />
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <>
+      <h3>今のターン{turn}</h3>
+      <table className="inner">
+        <tbody>
+          {indexes.map((h) => (
+            <tr key={h}>
+              <BoardRow h={h} putCell={putCell} rowColor={boardState[h]} />
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
   );
 };
+
 export default Board;
